@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<!-- saved from url=(0038)http://davidwalsh.name/demo/camera.php -->
+<html lang="en" dir="ltr"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+    	<title>Camera and Video Control with HTML5 Example</title>
+	<meta name="description" content="Access the desktop camera and video using HTML, JavaScript, and Canvas.  The camera may be controlled using HTML5 and getUserMedia.">
+
+    <style>
+		video { border: 1px solid #ccc; display: block; margin: 0 0 20px 0; }
+		#canvas { margin-top: 20px; border: 1px solid #ccc; display: block; }
+	</style>
+<body class=" demo-page">
+<div class="demo-wrapper">
+    <p><a target="_blank" href="http://davidwalsh.name/browser-camera">Browser camera</a></p>
+    <p><a target="_blank" href="http://motion-detector.nikhazy-dizajn.hu/">Motion detection</a></p>
+    <video id="video" width="640" height="480" autoplay></video>
+	<button id="snap">Snap Photo</button>
+	<canvas id="canvas" width="640" height="480"></canvas>
+    <button id="save">Save Photo</button>
+    <hr/>
+    	<canvas id="newPhoto"></canvas>
+		<canvas id="oldPhoto"></canvas>
+		<canvas id="savePhoto"></canvas>		    
+</div>
+
+<script>
+			var video 			= document.getElementById('video');		//the video tag
+			var newPhoto 		= document.getElementById('newPhoto');	//the newest image's canvas
+			var oldPhoto 		= document.getElementById('oldPhoto');	//the older image's canvas
+			var savePhoto 		= document.getElementById('savePhoto');	//the possible saved image's canvas
+
+			var ctxNew 			= newPhoto.getContext('2d');			//the latest image from video prepared for comparison
+			var ctxOld 			= oldPhoto.getContext('2d');            //copy of the older image from video prepared for comparison
+			var ctxSave 		= savePhoto.getContext('2d');           //the latest image from video in full size and color
+
+			var sampling		= 500;									//how much time needed between samples in milliseconds
+
+			var sensitivity		= 5;									//how sensitive the detection. 1 is the minimum 5 is ideal, more might be good at worst cameras where noise is present even when there is no movement
+
+			var first 			= true;									//true if it was the first iteration of the code
+
+			var sampleDimension	= 18; 									//size of the samples. Small square image based on camera stream. The bigger the more resource it needs. 8 works perfectly.
+
+            // Put event listeners into place
+		window.addEventListener("DOMContentLoaded", function() {
+			// Grab elements, create settings, etc.
+			var canvas = document.getElementById("canvas"),
+				context = canvas.getContext("2d"),
+				video = document.getElementById("video"),
+				videoObj = { "video": true },
+				errBack = function(error) {
+					console.log("Video capture error: ", error.code); 
+				};
+
+                //navigator.getUserMedia({video: true, toString : function() {return "video";}}, onSuccess, onError);
+
+			// Put video listeners into place
+			if(navigator.getUserMedia) { // Standard
+				navigator.getUserMedia(videoObj, function(stream) {
+					video.src = stream;
+					video.play();
+                    onSuccess(stream);
+				}, errBack);
+			} else if(navigator.webkitGetUserMedia) { // WebKit-prefixed
+				navigator.webkitGetUserMedia(videoObj, function(stream){
+					video.src = window.URL.createObjectURL(stream);
+					video.play();
+                    onSuccess(stream);
+				}, errBack);
+			} else if(navigator.mozGetUserMedia) { // WebKit-prefixed
+				navigator.mozGetUserMedia(videoObj, function(stream){					
+                    if (video.mozSrcObject !== undefined) {
+                            video.mozSrcObject = stream;
+                    } else {
+                            video.src = (window.URL && window.URL.createObjectURL(stream)) || stream;
+                    };
+                    // video.src = window.URL.createObjectURL(stream);
+					video.play();
+                    onSuccess(stream);
+				}, errBack);
+			}
+
+			// Trigger photo take
+			document.getElementById("snap").addEventListener("click", function() {
+				context.drawImage(video, 0, 0, 640, 480);
+			});
+			document.getElementById("save").addEventListener("click", function() {
+                var canvas = document.getElementById("canvas");
+				convertCanvasToImage(canvas);
+			});
+		}, false);
+
+        // Converts canvas to an image
+        function convertCanvasToImage(canvas) {
+            var image = new Image();
+            image.src = canvas.toDataURL("image/png");
+            return image;
+        }
+
+document.body.className+= ' demo-page';
+
+window.addEventListener('load', function() {
+	var s = 'script';
+	var d = document;
+	var w = window;
+	var firstScript = d.getElementsByTagName(s)[0];
+
+	
+	(function() {
+		var first_paragraph = document.getElementsByTagName('p')[0];
+		if(first_paragraph) {
+			first_paragraph.className = 'demo-intro';
+		}
+
+	})();
+	
+
+	// Promo!
+	(function() {
+
+		// Temporary - use MooTools 2.0 when available
+		function createElement(tagName, attr, parent) {
+			var el = d.createElement(tagName);
+			for(prop in attr) {
+				if(attr.hasOwnProperty(prop)) el.setAttribute(prop, attr[prop]);
+			}
+			parent.appendChild(el);
+			return el;
+		}
+
+		// Loads a script
+		function loadScript(url) {
+			var script = d.createElement('script');
+			script.src = url;
+			script.setAttribute('async', 'true');
+			d.documentElement.firstChild.appendChild(script);
+		}
+
+
+	})();
+});
+
+        
+            function hasGetUserMedia()
+			{
+				//returns true if supported
+				return !!(navigator.getUserMedia || navigator.webkitGetUserMedia ||
+						navigator.mozGetUserMedia || navigator.msGetUserMedia);
+			}
+			
+			function onSuccess(stream)
+			{
+				  
+				//We try to find motion in every X second
+				setInterval(function()
+				{
+					motionDetector();
+				}, sampling);
+
+			}
+			
+			function onError()
+			{
+				//if we fail (not supported, no camera etc.)
+				alert('No stream, no win. Refresh.');
+			}
+			
+			function grayScale(context, canvas)
+			{
+				//make canvas gray
+				var imgData = context.getImageData(0, 0, canvas.width, canvas.height);
+				var pixels  = imgData.data;
+				
+				for (var i = 0, n = pixels.length; i < n; i += 4) 
+				{
+					var grayscale = pixels[i] * .3 + pixels[i+1] * .59 + pixels[i+2] * .11;
+					pixels[i  ] = grayscale;        // red
+					pixels[i+1] = grayscale;        // green
+					pixels[i+2] = grayscale;        // blue
+				}
+				
+				//redraw the image in black & white
+				context.putImageData(imgData, 0, 0);
+			}
+
+			function colorMeanValue(context, canvas)
+			{
+				//calculate the mean color value of the pixels also we collect all the pixel's colors in array
+				var imgData		= context.getImageData(0, 0, canvas.width, canvas.height);
+				var pixels  	= imgData.data;
+				var colorList 	= new Array();
+				var colorSum 	= 0;
+				
+				for (var i = 0, n = pixels.length; i < n; i += 4) 
+				{
+					colorList.push(pixels[i+2]);
+					colorSum += pixels[i+2];
+				}
+				
+				return [Math.round(colorSum/(sampleDimension*sampleDimension)),colorList];
+			}
+			
+			function bits(colorMean)
+			{
+				//represent the the higher than the mean value colors as 1 others as 0
+				var bits 	= new Array();
+				var colors 	= colorMean[1];
+				
+				for(var i = 0; i<(sampleDimension*sampleDimension);i++)
+				{
+					if(colors[i]>=colorMean[0])
+					{
+						bits[i] = 1;
+					}
+					else
+					{
+						bits[i] = 0;
+					}
+					
+				}
+				return bits;
+
+			}
+			
+			function hammeringDistance(bits1,bits2){
+					//calculating the hammering distance of two set of binary data
+					var hD = 0;
+					
+					//console.log(bits1)
+					//console.log(bits2)
+					
+					for(i = 0;i<(sampleDimension*sampleDimension);i++)
+					{
+						if(bits1[i] != bits2[i])
+						{
+							hD++;
+						}
+					}
+					return hD;
+			}
+			
+			function saveImage(canvasToSave)
+			{
+				//create image from canvas
+				dataUrl 		= canvasToSave.toDataURL();
+				imageFound 		= document.createElement('img');
+				imageFound.src 	= dataUrl;
+				
+				document.body.appendChild(imageFound);
+			}
+
+			function motionDetector()
+			{
+
+                //this function creates 3 canvas data. The newest image, the newest in savable format and keeps the one before this if needed. This function
+				//depends on the first variable as there is no point of comparsion at first iteration.
+				
+				//we make the three canvases
+				ctxOld.drawImage(newPhoto, 0, 0, sampleDimension, sampleDimension);
+				ctxNew.drawImage(video, 0, 0, sampleDimension, sampleDimension);
+				ctxSave.drawImage(video, 0, 0, savePhoto.width, savePhoto.height);
+				
+				//convert the newest image to gray scale. There is no need to do this to the second one as it will become this one in the next round
+				grayScale(ctxNew, newPhoto);
+				
+				if(!first)
+				{
+					//start detecting motion (detecting difference between images 1 second from eachother.
+					hD = hammeringDistance
+					(
+						bits(colorMeanValue(ctxNew, newPhoto)),
+						bits(colorMeanValue(ctxOld, oldPhoto))
+					)
+					
+					//console.log(hD);
+					
+					if(hD > sensitivity)
+					{
+						saveImage(savePhoto);
+					}
+					
+					
+				} else {first=false;}
+			}
+
+			/*After all those functions lets start setting up the program*/
+
+			//Set up elements. Should be a ini() but I don't care right now
+
+			//We need this so we can use the videoWidth and ...Height, also we setup canvas sizes here, after we have video data
+			video.addEventListener("loadedmetadata", function(){
+				console.log(video.videoWidth+":"+video.videoHeight)
+				oldPhoto.width = oldPhoto.height = newPhoto.width = newPhoto.height = sampleDimension;
+				savePhoto.width = video.videoWidth;
+				savePhoto.height = video.videoHeight;
+			});
+
+			//Start the whole magic
+			if (hasGetUserMedia())
+			{
+				//it is working?
+				//navigator.getUserMedia || (navigator.getUserMedia = navigator.mozGetUserMedia || navigator.webkitGetUserMedia || navigator.msGetUserMedia);
+				//navigator.getUserMedia({video: true, toString : function() {return "video";}}, onSuccess, onError);
+			} 
+			else
+			{
+				//no support
+				alert('getUserMedia() is not supported in your browser. Try Chrome.');
+			}
+		</script>
+</body></html>
